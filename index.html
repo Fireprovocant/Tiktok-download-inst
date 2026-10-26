@@ -1,0 +1,194 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Baixador de Vídeos - Instagram e TikTok</title>
+<meta name="description" content="Cole o link do Instagram ou TikTok e baixe o vídeo sem marca d'água, com áudio e em boa qualidade.">
+<style>
+  :root{
+    --bg:#0e1015; --card:#171a22; --line:#262b37; --text:#eef0f5; --muted:#9097a8;
+    --accent:#7c5cff; --accent2:#ff4f8b; --ok:#3ddc97; --err:#ff6b6b;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0; min-height:100vh; background:radial-gradient(1200px 600px at 50% -10%, #1d1840 0%, var(--bg) 60%);
+    color:var(--text); font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+    display:flex; justify-content:center; padding:32px 16px;
+  }
+  main{width:100%; max-width:640px}
+  h1{font-size:clamp(1.7rem,5vw,2.4rem); margin:8px 0 6px; text-align:center; letter-spacing:-.02em}
+  h1 span{background:linear-gradient(90deg,var(--accent),var(--accent2)); -webkit-background-clip:text; background-clip:text; color:transparent}
+  .sub{color:var(--muted); text-align:center; margin:0 0 28px}
+  form{display:flex; gap:8px; flex-wrap:wrap}
+  input[type=url]{
+    flex:1 1 260px; padding:14px 16px; border-radius:12px; border:1px solid var(--line);
+    background:var(--card); color:var(--text); font-size:1rem; outline:none;
+  }
+  input[type=url]:focus{border-color:var(--accent)}
+  button{
+    border:0; border-radius:12px; padding:14px 20px; font-size:1rem; font-weight:600; cursor:pointer; color:#fff;
+    background:linear-gradient(90deg,var(--accent),var(--accent2));
+  }
+  button:disabled{opacity:.55; cursor:progress}
+  button.sec{background:var(--card); border:1px solid var(--line); color:var(--text)}
+  .paste{flex:0 0 auto}
+  #msg{min-height:24px; margin:14px 2px 0; font-size:.95rem}
+  #msg.err{color:var(--err)} #msg.ok{color:var(--ok)} #msg.load{color:var(--muted)}
+  .card{
+    display:none; margin-top:18px; background:var(--card); border:1px solid var(--line);
+    border-radius:16px; overflow:hidden;
+  }
+  .card.show{display:block}
+  .head{display:flex; gap:14px; padding:14px}
+  .thumb{
+    width:110px; height:150px; flex:0 0 auto; border-radius:10px; background:#0b0d12 center/cover no-repeat;
+    border:1px solid var(--line);
+  }
+  .meta{min-width:0; display:flex; flex-direction:column; gap:6px}
+  .title{font-weight:600; line-height:1.3; display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical; overflow:hidden; word-break:break-word}
+  .by,.dur{color:var(--muted); font-size:.9rem}
+  .actions{padding:0 14px 16px; display:grid; gap:10px}
+  label{font-size:.85rem; color:var(--muted)}
+  select{
+    width:100%; padding:12px; border-radius:10px; border:1px solid var(--line);
+    background:#0f1218; color:var(--text); font-size:1rem; margin-top:4px;
+  }
+  .row{display:grid; grid-template-columns:1fr 1fr; gap:10px}
+  @media(max-width:480px){ .row{grid-template-columns:1fr} .thumb{width:90px;height:125px} }
+  .note{margin-top:26px; color:var(--muted); font-size:.82rem; text-align:center; line-height:1.5}
+</style>
+</head>
+<body>
+<main>
+  <h1>Baixar vídeos do <span>Instagram</span> e <span>TikTok</span></h1>
+  <p class="sub">Cole o link de compartilhamento. Sem marca d'água, com áudio e na melhor qualidade disponível.</p>
+
+  <form id="f">
+    <input id="url" type="url" placeholder="https://www.tiktok.com/@usuario/video/..." required autocomplete="off" inputmode="url">
+    <button type="button" class="sec paste" id="paste">Colar</button>
+    <button type="submit" id="go">Buscar</button>
+  </form>
+  <div id="msg" class="load"></div>
+
+  <section class="card" id="card">
+    <div class="head">
+      <div class="thumb" id="thumb"></div>
+      <div class="meta">
+        <div class="title" id="title"></div>
+        <div class="by" id="by"></div>
+        <div class="dur" id="dur"></div>
+      </div>
+    </div>
+    <div class="actions">
+      <div>
+        <label for="q">Qualidade do vídeo</label>
+        <select id="q"></select>
+      </div>
+      <div class="row">
+        <button id="dv">Baixar vídeo (MP4)</button>
+        <button id="da" class="sec">Baixar só o áudio (MP3)</button>
+      </div>
+    </div>
+  </section>
+
+  <p class="note">
+    Use apenas para conteúdo seu ou com permissão de quem criou. Respeite os direitos autorais
+    e os termos de uso das plataformas. Funciona somente com vídeos públicos.
+  </p>
+</main>
+
+<script>
+  const $ = (id) => document.getElementById(id);
+  const msg = $("msg");
+  let current = null;
+
+  function say(text, cls){ msg.textContent = text || ""; msg.className = cls || ""; }
+
+  function fmtDur(s){
+    if(!s) return "";
+    s = Math.round(s);
+    return "Duração: " + Math.floor(s/60) + ":" + String(s%60).padStart(2,"0");
+  }
+
+  function filenameFrom(cd){
+    if(!cd) return null;
+    let m = /filename\*=UTF-8''([^;]+)/i.exec(cd);
+    if(m){ try{ return decodeURIComponent(m[1]); }catch(e){} }
+    m = /filename="?([^";]+)"?/i.exec(cd);
+    return m ? m[1] : null;
+  }
+
+  $("paste").onclick = async () => {
+    try{
+      const t = await navigator.clipboard.readText();
+      if(t){ $("url").value = t.trim(); }
+    }catch(e){ say("Não consegui acessar a área de transferência. Cole manualmente.", "err"); }
+  };
+
+  $("f").onsubmit = async (ev) => {
+    ev.preventDefault();
+    $("card").classList.remove("show");
+    current = null;
+    const url = $("url").value.trim();
+    $("go").disabled = true;
+    say("Buscando o vídeo...", "load");
+    try{
+      const r = await fetch("/api/info", {
+        method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({url})
+      });
+      const j = await r.json();
+      if(!r.ok) throw new Error(j.error || "Erro ao buscar o vídeo.");
+      current = {url, ...j};
+      $("title").textContent = j.title;
+      $("by").textContent = j.uploader ? "por " + j.uploader : "";
+      $("dur").textContent = fmtDur(j.duration);
+      $("thumb").style.backgroundImage = j.thumbnail ? `url("${j.thumbnail}")` : "none";
+      const q = $("q");
+      q.innerHTML = "";
+      q.add(new Option("Melhor qualidade disponível", ""));
+      (j.heights || []).forEach(h => q.add(new Option(h + "p", String(h))));
+      $("card").classList.add("show");
+      say("");
+    }catch(e){
+      say(e.message, "err");
+    }finally{
+      $("go").disabled = false;
+    }
+  };
+
+  async function baixar(kind){
+    if(!current) return;
+    const btns = [$("dv"), $("da")];
+    btns.forEach(b => b.disabled = true);
+    say("Preparando o arquivo... isso pode levar alguns segundos.", "load");
+    try{
+      const qs = new URLSearchParams({url: current.url, kind});
+      if(kind === "video" && $("q").value) qs.set("height", $("q").value);
+      const r = await fetch("/api/download?" + qs.toString());
+      if(!r.ok){
+        const j = await r.json().catch(() => ({}));
+        throw new Error(j.error || "Falha no download.");
+      }
+      const blob = await r.blob();
+      const name = filenameFrom(r.headers.get("Content-Disposition")) || (kind === "audio" ? "audio.mp3" : "video.mp4");
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = name;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(a.href), 15000);
+      say("Pronto! Download iniciado.", "ok");
+    }catch(e){
+      say(e.message, "err");
+    }finally{
+      btns.forEach(b => b.disabled = false);
+    }
+  }
+
+  $("dv").onclick = () => baixar("video");
+  $("da").onclick = () => baixar("audio");
+</script>
+</body>
+</html>
